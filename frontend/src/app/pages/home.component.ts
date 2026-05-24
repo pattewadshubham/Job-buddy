@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { AuthStateService } from '../core/auth-state.service';
 
 interface Job {
   id: string;
@@ -29,7 +30,10 @@ interface Job {
         </p>
         <div class="hero-actions">
           <a routerLink="/jobs" class="btn-primary">Browse Jobs</a>
-          <a routerLink="/login" class="btn-secondary">Login / Register</a>
+          
+          @if (!auth.isLoggedIn()) {
+            <a routerLink="/login" class="btn-secondary">Login / Register</a>
+          }
         </div>
       </div>
     </section>
@@ -138,6 +142,7 @@ interface Job {
 })
 export class HomeComponent implements OnInit {
   private readonly api = inject(ApiService);
+  readonly auth = inject(AuthStateService);
 
   readonly jobs = signal<Job[]>([]);
   readonly loading = signal(true);

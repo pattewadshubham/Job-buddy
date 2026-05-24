@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser
+from django.http import FileResponse, Http404
+from django.core.files.storage import default_storage
 from .models import SeekerProfile, RecruiterProfile, Skill, SeekerSkill, Experience, Resume
 from .serializers import (
     SeekerProfileSerializer, RecruiterProfileSerializer,
@@ -174,7 +176,51 @@ class ResumeURLView(APIView):
             resume = Resume.objects.get(id=resume_id)
         except Resume.DoesNotExist:
             return Response({"error": "Resume not found."}, status=status.HTTP_404_NOT_FOUND)
-        if str(resume.seeker.user_id) != str(request.user.id):
-            return Response({"error": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Allow access if the user is the seeker OR a recruiter
+        is_owner = str(resume.seeker.user_id) == str(request.user.id)
+        is_recruiter = RecruiterProfile.objects.filter(user_id=request.user.id).exists()
+        
+        if not (is_owner or is_recruiter):
+            return Response({"error": "Forbidden. You do not have permission to view this resume."}, status=status.HTTP_403_FORBIDDEN)
+        
         url = get_presigned_url(resume.local_path)
         return Response({"url": url})
+
+
+class ResumeDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, resume_id):
+        try:
+            resume = Resume.objects.get(id=resume_id)
+        except Resume.DoesNotExist:
+            raise Http404("Resume not found.")
+        
+        # Allow access if the user is the seeker OR a recruiter
+        is_owner = str(resume.seeker.user_id) == str(request.user.id)
+        is_recruiter = RecruiterProfile.objects.filter(user_id=request.user.id).exists()
+        
+        if not (is_owner or is_recruiter):
+            return Response({"error": "Forbidden. You do not have permission to download this resume."}, status=status.HTTP_403_FORBIDDEN)
+        
+        if not default_storage.exists(resume.local_path):
+            raise Http404("Resume file not found.")
+        
+        file = default_storage.open(resume.local_path, 'rb')
+        response = FileResponse(file, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{resume.resume_title}"'
+        return response
+
+class SeekerProfileByIdView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, seeker_id):
+        try:
+            profile = SeekerProfile.objects.get(user_id=seeker_id)
+            data = SeekerProfileSerializer(profile).data
+            data['skills'] = SeekerSkillSerializer(profile.skills.all(), many=True).data
+            data['experiences'] = ExperienceSerializer(profile.experiences.all(), many=True).data
+            return Response(data)
+        except SeekerProfile.DoesNotExist:
+            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)

@@ -20,6 +20,12 @@ export class ApiService {
     return this.http.get<T>(url, { headers: this.headers(auth) });
   }
 
+  getBlob(url: string, auth = false): Observable<Blob> {
+    // We cast responseType to 'json' to satisfy TypeScript's overload signatures, 
+    // but pass 'blob' so HttpClient knows to parse a file.
+    return this.http.get(url, { headers: this.headers(auth), responseType: 'blob' as 'json' }) as Observable<Blob>;
+  }
+
   post<T>(url: string, body: unknown, auth = false): Observable<T> {
     return this.http.post<T>(url, body, { headers: this.headers(auth) });
   }

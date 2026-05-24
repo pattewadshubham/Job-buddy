@@ -32,9 +32,30 @@ interface Applicant {
   seeker_email: string;
   job_id: string;
   job_title: string;
+  resume_id: string;
   cover_letter: string;
   current_stage: string;
   created_at: string;
+}
+
+interface SeekerProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  current_title: string;
+  summary: string;
+  github_url: string;
+  linkedin_url: string;
+  skills: Array<{ id: string; skill_name: string; years_of_experience: number }>;
+  experiences: Array<{
+    id: string;
+    company_name: string;
+    role_title: string;
+    start_date: string;
+    end_date: string | null;
+    description: string;
+  }>;
 }
 
 interface InterviewResponse {
@@ -67,7 +88,12 @@ interface InterviewResponse {
       } @else if (!isRecruiter()) {
         <div class="empty-card">This page is intended for recruiter accounts only.</div>
       } @else {
-        <div class="layout">
+        <div class="tabs">
+          <button type="button" [class.active]="activeTab() === 'create'" (click)="activeTab.set('create')">Create Job</button>
+          <button type="button" [class.active]="activeTab() === 'manage'" (click)="activeTab.set('manage')">Manage Jobs</button>
+        </div>
+
+        @if (activeTab() === 'create') {
           <article class="form-card">
             <h2>{{ editingJobId() ? 'Edit job' : 'Create a new job' }}</h2>
             <div class="grid">
@@ -129,93 +155,106 @@ interface InterviewResponse {
               <div class="message">{{ message() }}</div>
             }
           </article>
-
-          <article class="list-card">
-            <div class="list-head">
-              <h2>My jobs</h2>
-              <button type="button" class="secondary" (click)="loadMyJobs()">Refresh</button>
-            </div>
-            @if (jobsLoading()) {
-              <div class="empty-card small">Loading recruiter jobs...</div>
-            } @else if (!myJobs().length) {
-              <div class="empty-card small">No jobs created yet.</div>
-            } @else {
-              <div class="job-list">
-                @for (job of myJobs(); track job.id) {
-                  <article class="job-item">
-                    <div>
-                      <h3>{{ job.title }}</h3>
-                      <p>{{ job.location_type }} @if (job.location_city) { · {{ job.location_city }} }</p>
-                    </div>
-                    <span class="status-pill" [class.archived]="job.is_archived">
-                      {{ job.is_archived ? 'archived' : job.status }}
-                    </span>
-                    <div class="actions compact">
-                      <button type="button" class="secondary" (click)="startEdit(job)">Edit</button>
-                      <button type="button" class="secondary" (click)="openApplicants(job.id)">Applicants</button>
-                      @if (!job.is_archived && job.status !== 'published') {
-                        <button type="button" class="secondary" (click)="publish(job.id)">Publish</button>
-                      }
-                      @if (!job.is_archived && job.status !== 'closed') {
-                        <button type="button" class="secondary" (click)="close(job.id)">Close</button>
-                      }
-                      @if (!job.is_archived) {
-                        <button type="button" class="secondary" (click)="archive(job.id)">Archive</button>
-                      } @else {
-                        <button type="button" class="secondary" (click)="restore(job.id)">Restore</button>
-                      }
-                    </div>
-                  </article>
-                }
-              </div>
-            }
-
-            <div class="applicant-panel">
+        } @else {
+          <div class="manage-layout">
+            <article class="jobs-panel">
               <div class="list-head">
-                <h2>Applicants</h2>
+                <h2>My jobs</h2>
+                <button type="button" class="secondary" (click)="loadMyJobs()">Refresh</button>
+              </div>
+              @if (message()) {
+                <div class="message">{{ message() }}</div>
+              }
+              @if (jobsLoading()) {
+                <div class="empty-card small">Loading recruiter jobs...</div>
+              } @else if (!myJobs().length) {
+                <div class="empty-card small">No jobs created yet.</div>
+              } @else {
+                <div class="job-grid">
+                  @for (job of myJobs(); track job.id) {
+                    <article class="job-card" [class.selected]="selectedJobId() === job.id">
+                      <div class="job-header">
+                        <div>
+                          <h3>{{ job.title }}</h3>
+                          <p class="job-meta">{{ job.location_type }} @if (job.location_city) { · {{ job.location_city }} }</p>
+                        </div>
+                        <span class="status-pill" [class.archived]="job.is_archived">
+                          {{ job.is_archived ? 'archived' : job.status }}
+                        </span>
+                      </div>
+                      <p class="job-desc">{{ job.description | slice:0:120 }}{{ job.description.length > 120 ? '...' : '' }}</p>
+                      <div class="job-actions">
+                        <button type="button" class="secondary" (click)="startEdit(job)">Edit</button>
+                        <button type="button" class="secondary" (click)="openApplicants(job.id)">Applicants</button>
+                        @if (!job.is_archived && job.status !== 'published') {
+                          <button type="button" class="secondary" (click)="publish(job.id)">Publish</button>
+                        }
+                        @if (!job.is_archived && job.status !== 'closed') {
+                          <button type="button" class="secondary" (click)="close(job.id)">Close</button>
+                        }
+                        @if (!job.is_archived) {
+                          <button type="button" class="secondary" (click)="archive(job.id)">Archive</button>
+                        } @else {
+                          <button type="button" class="secondary" (click)="restore(job.id)">Restore</button>
+                        }
+                      </div>
+                    </article>
+                  }
+                </div>
+              }
+            </article>
+
+            <article class="applicants-panel">
+              <div class="list-head">
+                <h2>Applicants {{ selectedJob() ? 'for "' + selectedJob()!.title + '"' : '' }}</h2>
                 @if (selectedJob(); as currentJob) {
-                  <button type="button" class="secondary" (click)="openApplicants(currentJob.id)">Refresh applicants</button>
+                  <button type="button" class="secondary" (click)="openApplicants(currentJob.id)">Refresh</button>
                 }
               </div>
 
               @if (!selectedJob()) {
-                <div class="empty-card small">Choose a recruiter job to inspect applicants.</div>
+                <div class="empty-card small">Select a job from the left to view applicants.</div>
               } @else if (selectedJob(); as currentJob) {
                 @if (applicationsLoading()) {
-                  <div class="empty-card small">Loading applicants for {{ currentJob.title }}...</div>
+                  <div class="empty-card small">Loading applicants...</div>
                 } @else if (!applications().length) {
-                  <div class="empty-card small">No applicants yet for {{ currentJob.title }}.</div>
+                  <div class="empty-card small">No applicants yet.</div>
                 } @else {
-                  <div class="job-list">
+                  <div class="applicant-list">
                     @for (application of applications(); track application.id) {
-                      <article class="job-item applicant-item">
-                        <div>
-                          <h3>{{ application.seeker_email || application.seeker_id }}</h3>
-                          <p>{{ application.job_title || currentJob.title }}</p>
+                      <article class="applicant-card">
+                        <div class="applicant-header">
+                          <div class="applicant-info">
+                            <h3>{{ application.seeker_email || application.seeker_id }}</h3>
+                            <p class="meta-line">Applied {{ application.created_at | date: 'short' }}</p>
+                          </div>
+                          <span class="status-pill">{{ application.current_stage }}</span>
                         </div>
-                        <span class="status-pill">{{ application.current_stage }}</span>
 
-                        <p class="meta-line">Applied {{ application.created_at | date: 'medium' }}</p>
-                        <p class="meta-line">Cover letter: {{ application.cover_letter || 'Not provided' }}</p>
+                        <p class="cover-letter">{{ application.cover_letter || 'No cover letter provided' }}</p>
 
-                        <div class="actions compact">
+                        <div class="applicant-actions">
+                          <button type="button" class="secondary" (click)="viewProfile(application.seeker_id)">Profile</button>
+
+                          @if (application.resume_id) {
+                            <button type="button" class="secondary" (click)="viewResume(application.resume_id)">View Resume</button>
+                          }
+
                           <button type="button" class="secondary" (click)="toggleSchedule(application.id)">
-                            {{ schedulingApplicationId() === application.id ? 'Cancel interview' : 'Schedule interview' }}
+                            {{ schedulingApplicationId() === application.id ? 'Cancel' : 'Schedule' }}
                           </button>
                         </div>
 
                         @if (schedulingApplicationId() === application.id) {
-                          <div class="schedule-grid">
+                          <div class="schedule-form">
                             <label>
                               <span>Date and time</span>
                               <input [(ngModel)]="scheduleDateTime" type="datetime-local" />
                             </label>
                             <label>
                               <span>Recruiter notes</span>
-                              <textarea [(ngModel)]="scheduleNotes" rows="3"></textarea>
+                              <textarea [(ngModel)]="scheduleNotes" rows="2"></textarea>
                             </label>
-                          </div>
-                          <div class="actions compact">
                             <button type="button" (click)="scheduleInterview(application.id)">Generate interview link</button>
                           </div>
                         }
@@ -223,75 +262,230 @@ interface InterviewResponse {
                     }
                   </div>
                 }
-              } @else {
-                <div class="empty-card small">Choose a recruiter job to inspect applicants.</div>
               }
 
               @if (interviewMessage()) {
                 <div class="message">{{ interviewMessage() }}</div>
               }
+            </article>
+          </div>
 
-              @if (scheduledInterview(); as interview) {
-                <div class="sub-card interview-card">
-                  <h3>Latest interview link</h3>
-                  <p><strong>Scheduled:</strong> {{ interview.scheduled_at | date: 'medium' }}</p>
-                  <p><strong>Expires:</strong> {{ interview.expires_at | date: 'medium' }}</p>
-                  <p><strong>Link:</strong> <a [href]="interview.jitsi_link" target="_blank" rel="noreferrer">{{ interview.jitsi_link }}</a></p>
-                  <p><strong>Notes:</strong> {{ interview.recruiter_notes || 'None' }}</p>
+          @if (viewingProfile(); as profile) {
+            <div class="modal-overlay" (click)="closeProfile()">
+              <article class="modal-card" (click)="$event.stopPropagation()">
+                <div class="profile-header">
+                  <h2>{{ profile.first_name }} {{ profile.last_name }}</h2>
+                  <button type="button" class="close-btn" (click)="closeProfile()">Close</button>
                 </div>
-              }
+                  <div class="profile-section">
+                    <p><strong>Current Title:</strong> {{ profile.current_title || 'Not specified' }}</p>
+                    <p><strong>Phone:</strong> {{ profile.phone || 'Not provided' }}</p>
+                    @if (profile.github_url) {
+                      <p><strong>GitHub:</strong> <a [href]="profile.github_url" target="_blank" rel="noreferrer">{{ profile.github_url }}</a></p>
+                    }
+                    @if (profile.linkedin_url) {
+                      <p><strong>LinkedIn:</strong> <a [href]="profile.linkedin_url" target="_blank" rel="noreferrer">{{ profile.linkedin_url }}</a></p>
+                    }
+                  </div>
+                  @if (profile.summary) {
+                    <div class="profile-section">
+                      <h4>Summary</h4>
+                      <p>{{ profile.summary }}</p>
+                    </div>
+                  }
+                  @if (profile.skills?.length) {
+                    <div class="profile-section">
+                      <h4>Skills</h4>
+                      <div class="skills-grid">
+                        @for (skill of profile.skills; track skill.id) {
+                          <span class="skill-tag">{{ skill.skill_name }} ({{ skill.years_of_experience }}y)</span>
+                        }
+                      </div>
+                    </div>
+                  }
+                  @if (profile.experiences?.length) {
+                    <div class="profile-section">
+                      <h4>Experience</h4>
+                      @for (exp of profile.experiences; track exp.id) {
+                        <div class="experience-item">
+                          <p><strong>{{ exp.role_title }}</strong> at {{ exp.company_name }}</p>
+                          <p class="meta-line">{{ exp.start_date | date: 'MMM yyyy' }} - {{ exp.end_date ? (exp.end_date | date: 'MMM yyyy') : 'Present' }}</p>
+                          @if (exp.description) {
+                            <p>{{ exp.description }}</p>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+              </article>
             </div>
-          </article>
-        </div>
+          }
+
+          @if (scheduledInterview(); as interview) {
+            <article class="interview-banner">
+              <h3>Latest interview scheduled</h3>
+              <p><strong>Time:</strong> {{ interview.scheduled_at | date: 'medium' }}</p>
+              <p><strong>Link:</strong> <a [href]="interview.jitsi_link" target="_blank" rel="noreferrer">{{ interview.jitsi_link }}</a></p>
+              <p><strong>Notes:</strong> {{ interview.recruiter_notes || 'None' }}</p>
+            </article>
+          }
+        }
       }
     </section>
   `,
   styles: [`
     .page-card,
     .form-card,
-    .list-card,
-    .sub-card,
+    .jobs-panel,
+    .applicants-panel,
+    .modal-card,
     .empty-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 28px;
       box-shadow: var(--shadow);
     }
-    .page-card,
+    .page-card { display: grid; gap: 1.5rem; padding: 1.5rem; }
+    .tabs { display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+    .tabs button { background: transparent; border: none; color: var(--muted); padding: 0.75rem 1.5rem; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .tabs button.active { background: #e0e7ff; color: #3730a3; }
+    .tabs button:hover { background: #f1f5f9; }
+    
     .form-card,
-    .list-card,
-    .sub-card { padding: 1.5rem; }
-    .layout { display: grid; gap: 1rem; grid-template-columns: 1.1fr 0.9fr; }
+    .jobs-panel,
+    .applicants-panel { padding: 1.5rem; }
+    
+    .manage-layout { display: grid; gap: 1.5rem; grid-template-columns: 1fr 1fr; }
+    
     .grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; }
+    
     .list-head,
-    .job-item,
     .page-head,
     .actions { display: flex; gap: 1rem; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-    .job-list { display: grid; gap: 0.8rem; }
-    .job-item { background: rgba(10, 16, 32, 0.45); border-radius: 18px; padding: 1rem; }
-    .applicant-item { align-items: stretch; }
-    .applicant-panel { border-top: 1px solid var(--border); margin-top: 1.25rem; padding-top: 1.25rem; }
-    .actions.compact { margin-top: 0.6rem; }
-    .schedule-grid { 
-  display: grid; 
-  gap: 1.25rem; 
-  grid-template-columns: 1fr; /* Stacks the inputs vertically */
-  margin-top: 1rem; 
-  background: var(--bg); /* Adds a subtle inset look */
-  border: 1px solid var(--border);
-  padding: 1.25rem;
-  border-radius: 12px;
-}
+    
+    .job-grid { display: grid; gap: 1rem; margin-top: 1rem; }
+    .job-card { 
+      display: flex;
+      flex-direction: column;
+      background: var(--card); 
+      border: 1px solid var(--border);
+      border-radius: 18px; 
+      padding: 1.25rem; 
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .job-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .job-card.selected { border-color: var(--accent); background: #eff6ff; }
+    
+    .job-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem; }
+    .job-meta { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0 0; }
+    .job-desc { color: var(--muted); font-size: 0.95rem; margin: 0.5rem 0; }
+    
+    .job-actions { 
+      display: flex; 
+      gap: 0.5rem; 
+      flex-wrap: wrap; 
+      margin-top: auto; 
+      padding-top: 1rem;
+    }
+    .job-actions button { padding: 0.4rem 0.8rem; font-size: 0.85rem; min-height: auto; }
+    
+    .applicant-list { display: grid; gap: 1rem; margin-top: 1rem; max-height: 70vh; overflow-y: auto; }
+    .applicant-card { 
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: var(--card); 
+      border-radius: 18px; 
+      padding: 1.25rem;
+      border: 1px solid var(--border);
+    }
+    
+    .applicant-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .applicant-info { display: grid; gap: 0.25rem; }
+    .cover-letter { color: var(--muted); font-size: 0.9rem; font-style: italic; margin: 0; }
+    .applicant-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    
+    .schedule-form { 
+      display: grid; 
+      gap: 1rem; 
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 1rem;
+      border-radius: 12px;
+    }
+    
     .message,
     .small { margin-top: 1rem; padding: 1rem; }
-    .status-pill { background: rgba(238, 108, 77, 0.16); border-radius: 999px; color: #ffd1c6; padding: 0.45rem 0.8rem; text-transform: capitalize; }
-    .status-pill.archived { background: rgba(142, 145, 150, 0.18); color: #d9dde4; }
-    .meta-line { margin: 0; color: var(--muted); }
-    .interview-card { margin-top: 1rem; }
+    
+    .status-pill { 
+      background: #e0e7ff; 
+      border-radius: 999px; 
+      color: #3730a3; 
+      padding: 0.45rem 0.8rem; 
+      text-transform: capitalize;
+      font-size: 0.85rem;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .status-pill.archived { background: #f1f5f9; color: #475569; }
+    
+    .meta-line { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    
+    .modal-overlay { 
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      right: 0; 
+      bottom: 0; 
+      background: rgba(0, 0, 0, 0.7); 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      z-index: 1000;
+      padding: 2rem;
+    }
+    .modal-card { 
+      max-width: 700px; 
+      width: 100%; 
+      max-height: 85vh; 
+      overflow-y: auto; 
+      padding: 2rem;
+    }
+    
+    .profile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .close-btn { 
+      background: #fee2e2; 
+      border: none; 
+      border-radius: 8px; 
+      padding: 0.4rem 1rem;
+      cursor: pointer; 
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #991b1b;
+      transition: all 0.2s;
+    }
+    .close-btn:hover { background: #fecaca; }
+    
+    .profile-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .profile-section:first-of-type { border-top: none; padding-top: 0; }
+    .skills-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    .skill-tag { background: #dbeafe; border-radius: 999px; color: #1e40af; padding: 0.35rem 0.7rem; font-size: 0.9rem; font-weight: 500; }
+    .experience-item { margin-top: 0.8rem; padding: 0.8rem; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+    
+    .interview-banner { 
+      background: #ecfdf5; 
+      border: 1px solid #6ee7b7;
+      border-radius: 18px; 
+      padding: 1.25rem;
+      margin-top: 1rem;
+      color: #065f46;
+    }
+    
     @media (max-width: 980px) {
-      .layout,
-      .grid,
-      .schedule-grid { grid-template-columns: 1fr; }
+      .manage-layout,
+      .grid { grid-template-columns: 1fr; }
+      .modal-overlay { padding: 1rem; }
     }
   `],
 })
@@ -312,6 +506,9 @@ export class PostJobComponent implements OnInit {
   readonly schedulingApplicationId = signal('');
   readonly scheduledInterview = signal<InterviewResponse | null>(null);
   readonly selectedJob = computed(() => this.myJobs().find((job) => job.id === this.selectedJobId()) ?? null);
+  readonly viewingProfile = signal<SeekerProfile | null>(null);
+
+  readonly activeTab = signal<'create' | 'manage'>('manage');
 
   readonly form = {
     title: '',
@@ -338,6 +535,32 @@ export class PostJobComponent implements OnInit {
       this.loadMyJobs();
     }
   }
+protected viewResume(resumeId: string): void {
+    if (!resumeId) {
+      this.interviewMessage.set('No resume was attached to this application.');
+      return;
+    }
+
+    this.interviewMessage.set('Loading resume securely...');
+    
+    // Hit the secure download endpoint, which requires the Bearer token
+    this.api.getBlob(`${this.api.profileBase}/seeker/resumes/${resumeId}/download/`, true).subscribe({
+      next: (blob) => {
+        this.interviewMessage.set('');
+        // Create a secure, temporary local URL for the PDF blob
+        const fileUrl = window.URL.createObjectURL(blob);
+        // Open the PDF in a new tab
+        window.open(fileUrl, '_blank');
+        
+        // Optional cleanup: Revoke the URL after a short delay to free memory
+        setTimeout(() => window.URL.revokeObjectURL(fileUrl), 10000);
+      },
+      error: (error) => {
+        console.error(error);
+        this.interviewMessage.set('Failed to load resume. You may not have permission.');
+      },
+    });
+  }
 
   protected createJob(): void {
     const payload = {
@@ -358,6 +581,7 @@ export class PostJobComponent implements OnInit {
         this.message.set('Job created successfully.');
         this.resetForm();
         this.loadMyJobs();
+        this.activeTab.set('manage');
       },
       error: (error) => this.message.set(this.errorMessage(error)),
     });
@@ -372,11 +596,13 @@ export class PostJobComponent implements OnInit {
     this.form.salary_min = job.salary_min ?? 0;
     this.form.salary_max = job.salary_max ?? 0;
     this.form.experience_required = job.experience_required;
+    this.activeTab.set('create');
   }
 
   protected cancelEdit(): void {
     this.editingJobId.set('');
     this.resetForm();
+    this.activeTab.set('manage');
   }
 
   protected updateJob(): void {
@@ -399,6 +625,7 @@ export class PostJobComponent implements OnInit {
         this.message.set('Job updated.');
         this.cancelEdit();
         this.loadMyJobs();
+        this.activeTab.set('manage');
       },
       error: (error) => this.message.set(this.errorMessage(error)),
     });
@@ -497,8 +724,20 @@ export class PostJobComponent implements OnInit {
     });
   }
 
+  protected viewProfile(seekerId: string): void {
+    this.api.get<SeekerProfile>(`${this.api.profileBase}/seeker/${seekerId}/`, true).subscribe({
+      next: (profile) => this.viewingProfile.set(profile),
+      error: (error) => this.interviewMessage.set(this.errorMessage(error)),
+    });
+  }
+
+  protected closeProfile(): void {
+    this.viewingProfile.set(null);
+  }
+
   protected loadMyJobs(): void {
     this.jobsLoading.set(true);
+    this.message.set('');
     this.api.get<RecruiterJob[]>(`${this.api.jobsBase}/my/`, true).subscribe({
       next: (jobs) => {
         this.myJobs.set(jobs);
@@ -515,7 +754,12 @@ export class PostJobComponent implements OnInit {
         this.jobsLoading.set(false);
       },
       error: (error) => {
-        this.message.set(this.errorMessage(error));
+        const errMsg = this.errorMessage(error);
+        if (errMsg.includes('Invalid or expired token')) {
+          this.message.set('Your session has expired. Please log in again.');
+        } else {
+          this.message.set(errMsg);
+        }
         this.jobsLoading.set(false);
       },
     });
