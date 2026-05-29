@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 from notifications.utils import create_notification, send_notification_email
 
 
-TOPICS = ['application.stage_changed', 'interview.scheduled', 'user.registered']
+TOPICS = ['application.stage_changed', 'interview.scheduled', 'user.registered', 'application.received']
 
 
 class Command(BaseCommand):
@@ -77,3 +77,18 @@ class Command(BaseCommand):
                         subject='Welcome to Job Buddy',
                         message='Your account was created successfully.',
                     )
+
+            elif topic == 'application.received':
+                recruiter_id = payload.get('recruiter_id')
+                job_title = payload.get('job_title', 'your job')
+                seeker_email = payload.get('seeker_email', 'A candidate')
+                self.stdout.write(f"Processing application.received for recruiter {recruiter_id}")
+                if recruiter_id:
+                    notification = create_notification(
+                        user_id=recruiter_id,
+                        notification_type=topic,
+                        title='New application received',
+                        body=f"New application from {seeker_email} for {job_title}",
+                        payload=payload,
+                    )
+                    self.stdout.write(self.style.SUCCESS(f"Created notification {notification.id} for recruiter {recruiter_id}"))

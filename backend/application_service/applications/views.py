@@ -15,7 +15,7 @@ from .serializers import (
     InterviewSerializer,
     StageUpdateSerializer,
 )
-from .utils import fetch_job_details, publish_application_stage_changed, publish_interview_scheduled
+from .utils import fetch_job_details, publish_application_stage_changed, publish_interview_scheduled, publish_application_received
 
 
 def recruiter_owns_application(application, user):
@@ -79,6 +79,12 @@ class ApplyView(APIView):
             new_stage=application.current_stage,
             changed_by=seeker_id,
             note='Application submitted',
+        )
+        publish_application_received(
+            application.id,
+            application.recruiter_id,
+            application.job_title,
+            application.seeker_email,
         )
         return Response(ApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
 

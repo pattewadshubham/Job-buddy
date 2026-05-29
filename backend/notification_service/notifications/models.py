@@ -5,6 +5,7 @@ from django.db import models
 class Notification(models.Model):
     TYPE_CHOICES = [
         ('application.stage_changed', 'Application Stage Changed'),
+        ('application.received', 'Application Received'),
         ('interview.scheduled', 'Interview Scheduled'),
         ('user.registered', 'User Registered'),
         ('system', 'System'),

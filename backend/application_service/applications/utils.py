@@ -40,6 +40,25 @@ def publish_interview_scheduled(application_id, seeker_id, scheduled_at, jitsi_l
         pass
 
 
+def publish_application_received(application_id, recruiter_id, job_title='', seeker_email=''):
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+        event_data = {
+            'application_id': str(application_id),
+            'recruiter_id': str(recruiter_id),
+            'job_title': job_title,
+            'seeker_email': seeker_email,
+        }
+        producer.send('application.received', event_data)
+        producer.flush()
+        print(f"Published application.received event: {event_data}")
+    except Exception as e:
+        print(f"Failed to publish application.received event: {e}")
+
+
 def fetch_job_details(job_id):
     url = f"{settings.JOB_SERVICE_URL}/{job_id}/"
     try:
