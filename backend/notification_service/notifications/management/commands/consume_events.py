@@ -49,7 +49,7 @@ class Command(BaseCommand):
                         user_id=user_id,
                         notification_type=topic,
                         title='Interview scheduled',
-                        body=f"Interview scheduled for {job_title} at {scheduled_at}",
+                        body=f"Interview scheduled for {job_title} at {scheduled_at}. Join here: {jitsi_link}",
                         payload=payload,
                     )
                     send_notification_email(

@@ -10,7 +10,7 @@ from .serializers import (
     SeekerProfileSerializer, RecruiterProfileSerializer,
     SkillSerializer, SeekerSkillSerializer, ExperienceSerializer, ResumeSerializer
 )
-from .utils import upload_to_s3, extract_text_from_pdf, get_presigned_url, publish_resume_uploaded
+from .utils import upload_to_s3, extract_text_from_pdf, get_presigned_url, publish_resume_uploaded, publish_resume_deleted
 
 
 def get_seeker_profile(user_id):
@@ -163,9 +163,55 @@ class ResumeUploadView(APIView):
             parsing_status=parsing_status if raw_text else 'failed',
         )
 
-        publish_resume_uploaded(resume.id, seeker.id, raw_text)
+        publish_resume_uploaded(resume.id, seeker.user_id, raw_text)
 
         return Response(ResumeSerializer(resume).data, status=status.HTTP_201_CREATED)
+
+
+class ResumeDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, resume_id):
+        seeker = get_seeker_profile(request.user.id)
+        if not seeker:
+            return Response({"error": "Seeker profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            resume = seeker.resumes.get(id=resume_id)
+        except Resume.DoesNotExist:
+            return Response({"error": "Resume not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Publish event before deleting to ensure matching service can delete embeddings
+        publish_resume_deleted(resume.id, seeker.user_id)
+        
+        # Optionally, delete the file from storage
+        if default_storage.exists(resume.local_path):
+            default_storage.delete(resume.local_path)
+            
+        resume.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, resume_id):
+        seeker = get_seeker_profile(request.user.id)
+        if not seeker:
+            return Response({"error": "Seeker profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            resume = seeker.resumes.get(id=resume_id)
+        except Resume.DoesNotExist:
+            return Response({"error": "Resume not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_primary = request.data.get('is_primary')
+        if is_primary is not None:
+            if is_primary:
+                # Set all other resumes to not primary
+                seeker.resumes.exclude(id=resume.id).update(is_primary=False)
+            resume.is_primary = is_primary
+            resume.save()
+            return Response(ResumeSerializer(resume).data)
+        
+        return Response({"error": "No valid data provided."}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class ResumeURLView(APIView):
@@ -217,10 +263,18 @@ class SeekerProfileByIdView(APIView):
 
     def get(self, request, seeker_id):
         try:
-            profile = SeekerProfile.objects.get(user_id=seeker_id)
+            # Try to lookup by profile primary key first
+            profile = SeekerProfile.objects.filter(id=seeker_id).first()
+            if not profile:
+                # If not found, try to lookup by user_id
+                profile = SeekerProfile.objects.filter(user_id=seeker_id).first()
+            
+            if not profile:
+                return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+                
             data = SeekerProfileSerializer(profile).data
             data['skills'] = SeekerSkillSerializer(profile.skills.all(), many=True).data
             data['experiences'] = ExperienceSerializer(profile.experiences.all(), many=True).data
             return Response(data)
-        except SeekerProfile.DoesNotExist:
-            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

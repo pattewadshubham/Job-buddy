@@ -38,6 +38,10 @@ export class ApiService {
     return this.http.patch<T>(url, body, { headers: this.headers(auth) });
   }
 
+  delete<T>(url: string, auth = false): Observable<T> {
+    return this.http.delete<T>(url, { headers: this.headers(auth) });
+  }
+
   private headers(auth: boolean): HttpHeaders {
     let headers = new HttpHeaders({ 'Content-Type': 'application/json' });
 

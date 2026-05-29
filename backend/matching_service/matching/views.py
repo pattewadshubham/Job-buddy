@@ -1,9 +1,10 @@
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from pgvector.django import CosineDistance
 
 from .models import JobEmbedding, ResumeEmbedding
-from .utils import cosine_similarity, generate_embedding, literal_to_vector, vector_to_literal
+from .utils import generate_embedding
 
 
 class HealthView(APIView):
@@ -29,7 +30,7 @@ class UpsertResumeEmbeddingView(APIView):
             resume_id=resume_id,
             defaults={
                 'seeker_id': seeker_id,
-                'embedding': vector_to_literal(vector),
+                'embedding': vector,
             },
         )
         return Response({'message': 'Resume embedding saved.', 'id': str(emb.id)})
@@ -48,7 +49,7 @@ class UpsertJobEmbeddingView(APIView):
         vector = generate_embedding(description_text)
         emb, _ = JobEmbedding.objects.update_or_create(
             job_id=job_id,
-            defaults={'embedding': vector_to_literal(vector)},
+            defaults={'embedding': vector},
         )
         return Response({'message': 'Job embedding saved.', 'id': str(emb.id)})
 
@@ -57,18 +58,29 @@ class JobsForSeekerView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, seeker_id):
-        resume = ResumeEmbedding.objects.filter(seeker_id=seeker_id).order_by('-updated_at').first()
+        resume_id = request.query_params.get('resume_id')
+        if resume_id:
+            resume = ResumeEmbedding.objects.filter(seeker_id=seeker_id, resume_id=resume_id).first()
+            if not resume:
+                # Fallback if specific resume embedding not found
+                resume = ResumeEmbedding.objects.filter(seeker_id=seeker_id).order_by('-updated_at').first()
+        else:
+            resume = ResumeEmbedding.objects.filter(seeker_id=seeker_id).order_by('-updated_at').first()
+            
         if not resume:
             return Response({'results': []})
 
-        seeker_vec = literal_to_vector(resume.embedding)
-        results = []
-        for job in JobEmbedding.objects.all():
-            score = cosine_similarity(seeker_vec, literal_to_vector(job.embedding))
-            results.append({'job_id': str(job.job_id), 'similarity_score': round(score, 4)})
+        seeker_vec = resume.embedding
+        # Use pgvector CosineDistance for efficient DB-level search
+        matches = JobEmbedding.objects.annotate(
+            distance=CosineDistance('embedding', seeker_vec)
+        ).order_by('distance')[:10]
 
-        results.sort(key=lambda x: x['similarity_score'], reverse=True)
-        return Response({'results': results[:10]})
+        results = [
+            {'job_id': str(m.job_id), 'similarity_score': round(1 - float(m.distance), 4)}
+            for m in matches
+        ]
+        return Response({'results': results})
 
 
 class SeekersForJobView(APIView):
@@ -80,17 +92,18 @@ class SeekersForJobView(APIView):
         except JobEmbedding.DoesNotExist:
             return Response({'results': []})
 
-        job_vec = literal_to_vector(job.embedding)
-        results = []
-        for resume in ResumeEmbedding.objects.all():
-            score = cosine_similarity(job_vec, literal_to_vector(resume.embedding))
-            results.append(
-                {
-                    'seeker_id': str(resume.seeker_id),
-                    'resume_id': str(resume.resume_id),
-                    'similarity_score': round(score, 4),
-                }
-            )
+        job_vec = job.embedding
+        # Use pgvector CosineDistance for efficient DB-level search
+        matches = ResumeEmbedding.objects.annotate(
+            distance=CosineDistance('embedding', job_vec)
+        ).order_by('distance')[:10]
 
-        results.sort(key=lambda x: x['similarity_score'], reverse=True)
-        return Response({'results': results[:10]})
+        results = [
+            {
+                'seeker_id': str(m.seeker_id),
+                'resume_id': str(m.resume_id),
+                'similarity_score': round(1 - float(m.distance), 4),
+            }
+            for m in matches
+        ]
+        return Response({'results': results})

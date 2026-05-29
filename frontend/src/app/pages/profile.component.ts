@@ -142,9 +142,20 @@ interface JobDetails {
                   @if (resumes().length) {
                     <div class="list compact">
                       @for (item of resumes(); track item.id) {
-                        <div class="list-item">
-                          <strong>{{ item.resume_title }}</strong>
-                          <p class="meta-line">{{ item.parsing_status }} · {{ item.created_at | date: 'medium' }}</p>
+                        <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
+                          <div>
+                            <strong>{{ item.resume_title }}</strong>
+                            @if (item.is_primary) {
+                              <span class="primary-badge" style="margin-left: 0.5rem; background: #dcfce7; color: #065f46; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">PRIMARY</span>
+                            }
+                            <p class="meta-line">{{ item.parsing_status }} · {{ item.created_at | date: 'medium' }}</p>
+                          </div>
+                          <div style="display: flex; gap: 0.5rem;">
+                            @if (!item.is_primary) {
+                              <button type="button" class="secondary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" (click)="makePrimary(item.id)">Set Primary</button>
+                            }
+                            <button type="button" class="close-btn" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" (click)="deleteResume(item.id)">Delete</button>
+                          </div>
                         </div>
                       }
                     </div>
@@ -539,6 +550,27 @@ export class ProfileComponent implements OnInit {
         this.message.set('Resume uploaded successfully. It is currently being processed.');
         this.resumeTitle = '';
         this.selectedResumeFile = null;
+        this.loadResumes();
+      },
+      error: (error) => this.message.set(this.errorMessage(error)),
+    });
+  }
+
+  protected deleteResume(resumeId: string): void {
+    if (!confirm('Are you sure you want to delete this resume?')) return;
+    this.api.delete(`${this.api.profileBase}/seeker/resumes/${resumeId}/`, true).subscribe({
+      next: () => {
+        this.message.set('Resume deleted successfully.');
+        this.loadResumes();
+      },
+      error: (error) => this.message.set(this.errorMessage(error)),
+    });
+  }
+
+  protected makePrimary(resumeId: string): void {
+    this.api.patch(`${this.api.profileBase}/seeker/resumes/${resumeId}/`, { is_primary: true }, true).subscribe({
+      next: () => {
+        this.message.set('Primary resume updated successfully.');
         this.loadResumes();
       },
       error: (error) => this.message.set(this.errorMessage(error)),

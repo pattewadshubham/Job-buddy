@@ -43,3 +43,18 @@ def publish_resume_uploaded(resume_id, seeker_id, raw_text):
     except Exception:
         pass  # Kafka optional locally
 
+
+def publish_resume_deleted(resume_id, seeker_id):
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=getattr(settings, 'KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092'),
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+        producer.send('resume.deleted', {
+            'resume_id': str(resume_id),
+            'seeker_id': str(seeker_id),
+        })
+        producer.flush()
+    except Exception:
+        pass  # Kafka optional locally
+

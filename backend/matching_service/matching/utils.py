@@ -1,5 +1,6 @@
 import hashlib
 import math
+import numpy as np
 
 
 def vector_to_literal(vector):
@@ -24,22 +25,45 @@ def deterministic_embedding(text, dim=384):
     return values
 
 
-def generate_embedding(text):
-    try:
-        from sentence_transformers import SentenceTransformer
+# Load model once at module level to avoid expensive re-initialization
+_MODEL = None
 
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-        return model.encode(text or '', normalize_embeddings=True).tolist()
-    except Exception:
-        return deterministic_embedding(text)
+
+def get_model():
+    global _MODEL
+    if _MODEL is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            # Loading model once. This might take a few seconds on first call.
+            _MODEL = SentenceTransformer('all-MiniLM-L6-v2')
+        except Exception:
+            # Fallback to False to indicate failure and avoid repeated imports
+            _MODEL = False
+    return _MODEL
+
+
+def generate_embedding(text):
+    model = get_model()
+    if model:
+        try:
+            return model.encode(text or '', normalize_embeddings=True).tolist()
+        except Exception:
+            return deterministic_embedding(text)
+    return deterministic_embedding(text)
 
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2 or len(v1) != len(v2):
         return 0.0
-    dot = sum(a * b for a, b in zip(v1, v2))
-    mag1 = math.sqrt(sum(a * a for a in v1))
-    mag2 = math.sqrt(sum(b * b for b in v2))
-    if mag1 == 0 or mag2 == 0:
+    
+    vec1 = np.array(v1)
+    vec2 = np.array(v2)
+    
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    if norm1 == 0 or norm2 == 0:
         return 0.0
-    return dot / (mag1 * mag2)
+    
+    return float(np.dot(vec1, vec2) / (norm1 * norm2))
